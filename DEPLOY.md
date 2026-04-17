@@ -29,7 +29,7 @@ The key security detail: `index.html` calls `/api/generate` on your own domain. 
 
 ---
 
-## Option A — Deploy via Vercel CLI (recommended)
+## Option A — Deploy via Vercel CLI (easiest)
 
 **1. Install the Vercel CLI**
 
