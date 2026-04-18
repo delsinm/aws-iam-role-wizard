@@ -1,3 +1,55 @@
+<!--
+  AWS IAM Role Wizard
+  ===================
+  A web-based tool that makes it easy to create AWS IAM roles without needing to write any code.
+  IAM (Identity and Access Management) roles are how you control what AWS services and users are
+  allowed to do in your AWS environment — for example, allowing a server to read from S3, or
+  letting a third-party application access specific resources in your account. Normally, creating
+  these roles correctly requires writing complex policy documents by hand, which is time-consuming
+  and error-prone. The wizard replaces that process with a simple step-by-step form.
+
+  You work through six straightforward screens: naming the role and tagging it for your records,
+  choosing who or what is allowed to use it, selecting what permissions the role should have,
+  setting security guardrails like MFA requirements or IP restrictions, configuring advanced options
+  like session duration, and finally reviewing everything before generating. Once you click
+  "Generate IAM Role Files", the wizard automatically routes your configuration to the most
+  appropriate Claude model — simple roles using managed policies and basic service trust are sent
+  to Claude Haiku for faster turnaround, while more complex configurations involving inline
+  policies, OIDC or SAML trust, cross-account access, deny rules, or resource-level scoping are
+  sent to Claude Sonnet for its stronger reasoning on nuanced IAM logic — which then produces the
+  finished role configuration files ready to hand off to your cloud or DevOps team for deployment.
+  The AI is specifically instructed to follow AWS security best practices: no overly broad
+  permissions, no hardcoded sensitive values, and comments throughout the files so your team can
+  review and understand what has been generated.
+
+  The tool runs entirely in your web browser and requires no software installation. It is designed
+  to be hosted internally by your IT or DevOps team on Vercel (a cloud hosting platform), after
+  which anyone with the link can use it. Your AWS credentials and Anthropic API key are never
+  exposed in the browser — they stay securely on the server side. Access can be restricted to
+  specific IP ranges (such as your office network or VPN) so the tool is only reachable by staff
+  on your corporate network, and an optional rate limit can be enabled to prevent excessive API
+  usage.
+
+  Prerequisites
+  -------------
+  - A Vercel account (https://vercel.com/signup) — free tier works fine
+  - An Anthropic API key (https://console.anthropic.com/)
+  - Node.js installed locally
+  - Git installed locally
+
+  Deploying to Vercel
+  -------------------
+  Vercel is the hosting platform this tool is built to run on. Once deployed, it is accessible
+  to your team via a standard web URL — no local installation required for end users.
+
+  Deployment is handled by a member of your IT or DevOps team and typically takes under 30
+  minutes. You will need a free Vercel account and an Anthropic API key. The free Vercel tier
+  is sufficient for normal internal use.
+
+  See DEPLOY.md for complete step-by-step deployment instructions, including how to securely
+  configure your API key, restrict access to your corporate IP range, set up rate limiting,
+  and troubleshoot common issues.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -69,23 +121,24 @@
     top: 20px;
     right: 24px;
     z-index: 100;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 50%;
+    border: none;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 1rem;
     display: flex;
     align-items: center;
-    gap: 7px;
-    cursor: pointer;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--muted);
-    box-shadow: var(--shadow);
-    transition: all 0.2s;
+    justify-content: center;
+    transition: box-shadow 0.2s;
+    flex-shrink: 0;
+    padding: 0;
+    line-height: 1;
   }
-  .theme-toggle:hover { border-color: var(--accent); color: var(--text); }
-  .theme-toggle .icon { font-size: 15px; line-height: 1; }
+  .theme-toggle:hover { box-shadow: 0 0 0 2px var(--accent); }
 
   .shell {
     position: relative;
@@ -860,9 +913,7 @@
 </head>
 <body>
 
-<button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">
-  <span class="icon">☀️</span> <span id="themeLabel">Light</span>
-</button>
+<button class="theme-toggle" onclick="toggleTheme()" id="themeBtn" title="Toggle dark mode">☀️</button>
 
 <!-- Validation modal -->
 <div class="modal-overlay" id="validationModal" onclick="closeModal(event)">
@@ -911,6 +962,8 @@
 
 <script>
 // ─── Step definitions ────────────────────────────────────────────────────────
+// Ordered list of wizard steps. Each step has an id (used to route rendering)
+// and a label (displayed in the progress track at the top of the page).
 const STEPS = [
   { id: 'identity',    label: 'Identity'    },
   { id: 'trust',       label: 'Trust'       },
@@ -920,20 +973,33 @@ const STEPS = [
   { id: 'review',      label: 'Review'      },
 ];
 
+// Tracks which step the user is currently on (0-indexed).
 let currentStep = 0;
+
+// Central store for all wizard form values. Populated by collectStep() each
+// time the user navigates between steps. Used by buildPrompt() at generation time.
 const formData = {};
 
-// Custom roles list
+// Legacy fields retained for potential future use (custom role builder).
 let customRoles = [];
 let customRoleCounter = 0;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Safe accessor for formData — returns an empty string if the key hasn't been set yet,
+// which prevents undefined values from appearing in rendered HTML.
 function f(key) { return formData[key] !== undefined ? formData[key] : ''; }
+
+// Generates a string of <option> elements for a <select>, marking the matching
+// value as selected. Used throughout the render functions for dropdowns.
 function opt(arr, selected) {
   return arr.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
 }
 
 // ─── Step 1: Identity ─────────────────────────────────────────────────────────
+// Renders the first wizard step: role name, AWS account ID, owner/cost-center
+// tags, description, permission boundary toggle, and optional IAM role path.
+// Pre-populates all fields from formData so values survive step navigation.
 function renderIdentity() {
   return `
   <div class="card">
@@ -990,12 +1056,17 @@ function renderIdentity() {
   </div>`;
 }
 
+// Shows or hides the role path input field based on the toggle state,
+// and persists the toggle value to formData immediately (before collectStep runs).
 function toggleRolePath(on) {
   formData['useRolePath'] = on;
   document.getElementById('rolePathField').style.display = on ? '' : 'none';
 }
 
 // ─── Step 2: Trust Relationship ───────────────────────────────────────────────
+// Renders the trust relationship step. The user picks a principal type (AWS
+// service, IAM user/role, cross-account, OIDC, or SAML) via pill buttons,
+// and the lower section re-renders dynamically based on that choice.
 function renderTrust() {
   const trustType = f('trustType') || 'aws_service';
   const awsServices = [
@@ -1039,6 +1110,11 @@ function renderTrust() {
   </div>`;
 }
 
+// Returns the inner HTML for the trust details section based on the selected
+// principal type. Each branch renders fields specific to that trust model:
+// service chip grid for AWS services, ARN textarea for IAM users/roles,
+// account ID + external ID for cross-account, OIDC URL/audience/sub for OIDC,
+// and SAML provider ARN + IdP picker for SAML.
 function renderTrustDetails_inline(trustType, awsServices, selectedServices) {
   if (trustType === 'aws_service') {
     return `
@@ -1138,6 +1214,9 @@ function renderTrustDetails_inline(trustType, awsServices, selectedServices) {
   return '';
 }
 
+// Called when the user switches principal type pills. Saves current step data
+// first, then re-renders only the dynamic trust details section (not the whole
+// card) to avoid losing the pill selection state.
 function renderTrustDetails() {
   collectStep(currentStep);
   const awsServices = [
@@ -1154,6 +1233,9 @@ function renderTrustDetails() {
   document.getElementById('trustDetails').innerHTML = renderTrustDetails_inline(trustType, awsServices, selectedServices);
 }
 
+// Toggles an AWS service chip in the trust step on or off. Maintains the
+// selected services as an array in formData and updates the chip's visual
+// state immediately without re-rendering the whole step.
 function toggleService(id) {
   const arr = formData['trustedServices'] ? [...formData['trustedServices']] : [];
   const idx = arr.indexOf(id);
@@ -1164,6 +1246,10 @@ function toggleService(id) {
 }
 
 // ─── Step 3: Permissions ──────────────────────────────────────────────────────
+// Renders the permissions step. The user picks a permission mode (managed
+// policies only, custom inline policy, or both) via pills. The lower section
+// re-renders dynamically to show either the managed policy preset chips,
+// the per-service inline policy builder, or both.
 function renderPermissions() {
   const permMode = f('permMode') || 'managed';
   const presets = [
@@ -1201,6 +1287,11 @@ function renderPermissions() {
   </div>`;
 }
 
+// Returns the inner HTML for the permissions details section based on the
+// selected permission mode. Renders AWS managed policy preset chips and/or
+// the categorized inline service toggle list with Read/Write/Admin access
+// level selectors. Also handles the special Secrets Manager sub-section
+// which allows scoping access to specific secret ARNs or name prefixes.
 function renderPermDetails_inline(permMode, presets, selectedPresets) {
   let html = '';
   if (permMode === 'managed' || permMode === 'both') {
@@ -1334,6 +1425,8 @@ function renderPermDetails_inline(permMode, presets, selectedPresets) {
   return html;
 }
 
+// Called when the user switches permission mode pills. Saves current step
+// data first, then re-renders only the dynamic permissions details section.
 function renderPermDetails() {
   collectStep(currentStep);
   const mode = document.getElementById('permMode').value;
@@ -1353,6 +1446,8 @@ function renderPermDetails() {
   document.getElementById('permDetails').innerHTML = renderPermDetails_inline(mode, presets, selectedPresets);
 }
 
+// Toggles an AWS managed policy preset chip on or off. Stores selected policy
+// ARNs as an array in formData and updates the chip's visual state immediately.
 function togglePreset(id, arn) {
   let arr = Array.isArray(formData['managedPolicies']) ? [...formData['managedPolicies']] : [];
   const idx = arr.indexOf(arn);
@@ -1365,6 +1460,9 @@ function togglePreset(id, arn) {
   }
 }
 
+// Shows or hides the Secrets Manager sub-section (specific secret scoping)
+// when the secretsmanager service toggle is switched on or off. Also clears
+// the specific secrets toggle if the service is disabled entirely.
 function toggleSecretsManagerSection(enabled) {
   const section = document.getElementById('secretsManagerSection');
   if (section) section.style.display = enabled ? '' : 'none';
@@ -1375,6 +1473,8 @@ function toggleSecretsManagerSection(enabled) {
   }
 }
 
+// Shows or hides the secret ARN/prefix textarea based on whether the user
+// wants to restrict Secrets Manager access to specific secrets.
 function toggleSpecificSecrets(enabled) {
   formData['secretsManagerSpecific'] = enabled;
   const field = document.getElementById('secretsListField');
@@ -1398,6 +1498,9 @@ const SVC_CAT_MAP = {
 
 function getCatKey(label) { return label.replace(/[^a-z]/gi, '_'); }
 
+// Updates the colour of a service category label to accent blue when at least
+// one service in that category is enabled, or back to muted grey when none are.
+// Called after every toggleInlineSvc() to keep the UI in sync.
 function refreshCatLabel(catKey) {
   const label = document.getElementById('catlabel_' + catKey);
   if (!label) return;
@@ -1409,6 +1512,9 @@ function refreshCatLabel(catKey) {
   label.classList.toggle('has-active', hasActive);
 }
 
+// Collapses or expands a service category section in the inline policy builder.
+// Prevents collapsing a category that has active (enabled) services to avoid
+// hiding configured state from the user.
 function toggleCatSection(catKey) {
   const body = document.getElementById('catbody_' + catKey);
   const chevron = document.getElementById('chevron_' + catKey);
@@ -1424,6 +1530,9 @@ function toggleCatSection(catKey) {
   chevron.classList.toggle('collapsed');
 }
 
+// Enables or disables an AWS service in the inline policy builder. When enabled,
+// defaults the access level to 'read' if not previously set. Shows/hides the
+// access level chips accordingly, and refreshes the parent category label colour.
 function toggleInlineSvc(id, enabled) {
   if (!formData['inlineServices'] || Array.isArray(formData['inlineServices'])) {
     formData['inlineServices'] = {};
@@ -1444,6 +1553,8 @@ function toggleInlineSvc(id, enabled) {
   if (catKey) refreshCatLabel(catKey);
 }
 
+// Sets the access level (read / write / admin) for a given inline policy service
+// and updates the selected state of the corresponding access level chips in the UI.
 function setSvcLevel(id, level) {
   if (!formData['inlineServices'] || Array.isArray(formData['inlineServices'])) {
     formData['inlineServices'] = {};
@@ -1489,7 +1600,7 @@ function renderConditions() {
         <span class="toggle-label">Require SSL / TLS (aws:SecureTransport)</span>
         <a class="help-link" href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-securetransport" target="_blank" rel="noopener">?</a>
       </span>
-      <label class="toggle"><input type="checkbox" id="requireSSL" ${f('requireSSL') !== false ? 'checked' : ''}><span class="slider"></span></label>
+      <label class="toggle"><input type="checkbox" id="requireSSL" ${f('requireSSL') ? 'checked' : ''}><span class="slider"></span></label>
     </div>
     <div class="toggle-row">
       <span class="toggle-label-wrap">
@@ -1537,21 +1648,14 @@ function renderAdvanced() {
   <div class="card">
     <div class="card-title">Advanced Options <span class="tag">STEP 5</span></div>
     <div class="card-desc">// output format, backend, tagging strategy, extras</div>
-    <div class="grid-2" style="margin-bottom:16px">
-      <div class="field">
-        <label>Output Format <span class="req">*</span></label>
-        <div class="pill-group" id="outputPills">
-          ${[['terraform','Terraform HCL'],['json','JSON Policy']].map(([v,l]) =>
-            `<button type="button" class="pill ${(f('outputFormat')||'terraform')===v?'selected':''}" onclick="selectPill('outputFormat','${v}','outputPills')">${l}</button>`
-          ).join('')}
-        </div>
-        <input type="hidden" id="outputFormat" value="${f('outputFormat')||'terraform'}"/>
+    <div class="field" style="margin-bottom:16px">
+      <label>Output Format <span class="req">*</span></label>
+      <div class="pill-group" id="outputPills">
+        ${[['terraform','Terraform HCL'],['json','JSON Policy']].map(([v,l]) =>
+          `<button type="button" class="pill ${(f('outputFormat')||'terraform')===v?'selected':''}" onclick="selectPill('outputFormat','${v}','outputPills')">${l}</button>`
+        ).join('')}
       </div>
-      <div class="field">
-        <label>Terraform State Bucket</label>
-        <input type="text" id="stateBucket" placeholder="my-tf-state-bucket" value="${f('stateBucket')}"/>
-        <div class="hint">leave blank to skip remote backend block</div>
-      </div>
+      <input type="hidden" id="outputFormat" value="${f('outputFormat')||'terraform'}"/>
     </div>
     <hr class="section-divider"/>
     <div class="toggle-row">
@@ -1654,7 +1758,7 @@ function collectStep(idx) {
   if (id === 'trust')       collect(['trustType','trustedArns','trustedAccountId','trustedCrossArn','requireExternalId','oidcUrl','oidcAudience','oidcSub','oidcType','samlProviderArn','samlIdp','maxSessionSaml','customService']);
   if (id === 'permissions') collect(['permMode','extraManagedArns','accessLevel','resourceScope','resourceArns','secretsManagerSpecific','secretsList']);
   if (id === 'conditions')  collect(['requireMFA','restrictIp','ipRanges','requireSSL','enforceRegion','maxSession','roleChaining','denyActions','customCondition']);
-  if (id === 'advanced')    collect(['outputFormat','stateBucket','genInstanceProfile','separatePolicy','cwAlarms','useDataSource','extraTags','extraLocals']);
+  if (id === 'advanced')    collect(['outputFormat','genInstanceProfile','separatePolicy','cwAlarms','useDataSource','extraTags','extraLocals']);
   if (id === 'review')      collect(['customNotes']);
 }
 
@@ -1861,6 +1965,36 @@ function renderAll() {
   panel.appendChild(nav);
 }
 
+// ─── Model selector ──────────────────────────────────────────────────────────
+function selectModel() {
+  const d = formData;
+
+  const isComplexTrust =
+    ['oidc', 'saml', 'cross_account'].includes(d.trustType) ||
+    (d.trustType === 'aws_service' && (d.trustedServices || []).length > 2);
+
+  const hasInlinePolicy =
+    d.permMode === 'custom' || d.permMode === 'both' ||
+    (d.inlineServices && typeof d.inlineServices === 'object' && Object.keys(d.inlineServices).length > 0);
+
+  const hasAdvancedConditions =
+    d.requireMFA ||
+    d.restrictIp ||
+    d.enforceRegion ||
+    (d.denyActions && d.denyActions.trim().length > 0) ||
+    (d.customCondition && d.customCondition.trim().length > 0);
+
+  const hasResourceScoping =
+    d.resourceScope === 'specific' || d.resourceScope === 'tagged' ||
+    (d.resourceArns && d.resourceArns.trim().length > 0);
+
+  const isComplex = isComplexTrust || hasInlinePolicy || hasAdvancedConditions || hasResourceScoping;
+
+  return isComplex
+    ? { model: 'claude-sonnet-4-20250514', label: 'Claude Sonnet (complex config)' }
+    : { model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku (simple config)' };
+}
+
 // ─── Generation ───────────────────────────────────────────────────────────────
 let generatedFiles = {};
 let activeFile = '';
@@ -1884,6 +2018,7 @@ async function generateIAM() {
 
   generatedFiles = {};
   const prompt = buildPrompt();
+  const { model, label } = selectModel();
 
   let progress = 0;
   const interval = setInterval(() => {
@@ -1892,6 +2027,7 @@ async function generateIAM() {
   }, 200);
 
   const statusMessages = [
+    `Using ${label}…`,
     'Analyzing role configuration…',
     'Building trust policy document…',
     'Generating permission statements…',
@@ -1912,8 +2048,8 @@ async function generateIAM() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
+        model: model,
+        max_tokens: 6000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -2006,13 +2142,12 @@ function buildPrompt() {
   const wantJSON = d.outputFormat === 'json';
 
   const files = [];
-  if (wantTF)   files.push('providers.tf', 'iam_role.tf', 'variables.tf', 'outputs.tf');
+  if (wantTF)   files.push('iam_role.tf', 'variables.tf', 'outputs.tf');
   if (wantJSON) files.push('trust_policy.json', 'permission_policy.json');
 
   return `You are a senior AWS security engineer. Generate complete, production-ready IAM role configuration for the specification below.
 
 Output EXACTLY these files, each preceded by its filename as "### filename" followed by a code block with the appropriate language tag (hcl for Terraform, json for JSON).
-- providers.tf must contain the terraform{} required_version/required_providers block AND the provider "aws" {} block. Do NOT put these in iam_role.tf.
 ${files.map(f => `- ${f}`).join('\n')}
 
 ROLE IDENTITY:
@@ -2062,7 +2197,6 @@ SECURITY CONDITIONS:
 ADVANCED:
 - Generate instance profile: ${d.genInstanceProfile?'yes':'no'}
 - CloudWatch alarm on role assumption: ${d.cwAlarms?'yes':'no'}
-- Terraform state bucket: ${d.stateBucket||'(none - skip backend block)'}
 - Extra tags: ${d.extraTags||'none'}
 - Extra Terraform locals/variables: ${d.extraLocals||'none'}
 
@@ -2085,9 +2219,7 @@ function toggleTheme() {
   const html = document.documentElement;
   const isDark = html.getAttribute('data-theme') === 'dark';
   html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  document.getElementById('themeBtn').innerHTML = isDark
-    ? '<span class="icon">☀️</span> <span id="themeLabel">Light</span>'
-    : '<span class="icon">🌙</span> <span id="themeLabel">Dark</span>';
+  document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
