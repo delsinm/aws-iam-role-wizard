@@ -2211,7 +2211,11 @@ Rules:
 - Use for_each or dynamic blocks where appropriate
 - variables.tf: cover all configurable values (account ID, role name, trusted principals, etc.)
 - outputs.tf: role ARN, role name, instance profile ARN (if applicable)
-- JSON files: valid IAM policy JSON only, no prose`;
+- JSON files: valid IAM policy JSON only, no prose
+- Do NOT emit a terraform {} block (required_version, required_providers, etc.) — this code is added to an existing codebase that already has one
+- MANAGED POLICY ATTACHMENTS (Terraform): for every managed policy ARN (both preset and additional), you MUST generate an aws_iam_role_policy_attachment resource. Use for_each over a local list of all managed policy ARNs so each attachment is a separate, addressable resource. Never use the deprecated aws_iam_policy_attachment resource — always use aws_iam_role_policy_attachment.
+- INLINE POLICY (Terraform): when an inline policy is required (mode = custom or both), generate a single aws_iam_role_policy resource (or aws_iam_policy + aws_iam_role_policy_attachment if "Create policy as separate resource" is yes) using the aws_iam_policy_document data source for the policy body. Do NOT embed the policy JSON as a raw heredoc string.
+- Every attachment resource must explicitly depend on (or reference) the aws_iam_role it attaches to, so Terraform can order creation correctly.`;
 }
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
