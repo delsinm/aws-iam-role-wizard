@@ -969,8 +969,7 @@ const STEPS = [
   { id: 'trust',       label: 'Trust'       },
   { id: 'permissions', label: 'Permissions' },
   { id: 'conditions',  label: 'Conditions'  },
-  { id: 'advanced',    label: 'Advanced'    },
-  { id: 'review',      label: 'Review'      },
+  { id: 'advanced',    label: 'Review'      },
 ];
 
 // Tracks which step the user is currently on (0-indexed).
@@ -1711,12 +1710,10 @@ function renderReview() {
     ['Inline Services', (d.inlineServices && typeof d.inlineServices === 'object' && !Array.isArray(d.inlineServices)) ? Object.keys(d.inlineServices).join(', ') || '—' : '—'],
     ['Max Session', d.maxSession || '—'],
     ['MFA Required', d.requireMFA ? 'Yes' : 'No'],
-    ['Output Format', d.outputFormat || 'terraform'],
-    ['Instance Profile', d.genInstanceProfile ? 'Yes' : 'No'],
   ];
   return `
   <div class="card">
-    <div class="card-title">Review & Generate <span class="tag">STEP 6</span></div>
+    <div class="card-title">Review & Generate <span class="tag">STEP 5</span></div>
     <div class="card-desc">// confirm configuration and generate output files</div>
     <div class="summary-grid">
       ${items.map(([l,v]) => `<div class="summary-item"><div class="s-label">${l}</div><div class="s-val">${v}</div></div>`).join('')}
@@ -1758,8 +1755,7 @@ function collectStep(idx) {
   if (id === 'trust')       collect(['trustType','trustedArns','trustedAccountId','trustedCrossArn','requireExternalId','oidcUrl','oidcAudience','oidcSub','oidcType','samlProviderArn','samlIdp','maxSessionSaml','customService']);
   if (id === 'permissions') collect(['permMode','extraManagedArns','accessLevel','resourceScope','resourceArns','secretsManagerSpecific','secretsList']);
   if (id === 'conditions')  collect(['requireMFA','restrictIp','ipRanges','requireSSL','enforceRegion','maxSession','roleChaining','denyActions','customCondition']);
-  if (id === 'advanced')    collect(['outputFormat','genInstanceProfile','separatePolicy','cwAlarms','useDataSource','extraTags','extraLocals']);
-  if (id === 'review')      collect(['customNotes']);
+  if (id === 'advanced')    collect(['customNotes']);
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -1782,10 +1778,7 @@ const STEP_RULES = {
     { id: 'inlineServices',  label: 'Custom Inline Service',   hint: 'enable at least one service', special: 'perm_inline'  },
   ],
   conditions: [],
-  advanced: [
-    { id: 'outputFormat', label: 'Output Format', hint: 'terraform / json', special: 'pill', pillGroup: 'outputPills' },
-  ],
-  review: [],
+  advanced: [],
 };
 
 function validateStep(idx) {
@@ -1947,8 +1940,7 @@ function renderAll() {
   if (id === 'trust')       html = renderTrust();
   if (id === 'permissions') html = renderPermissions();
   if (id === 'conditions')  html = renderConditions();
-  if (id === 'advanced')    html = renderAdvanced();
-  if (id === 'review')      html = renderReview();
+  if (id === 'advanced')    html = renderReview();
   panel.innerHTML = html;
 
   const isLast = currentStep === STEPS.length - 1;

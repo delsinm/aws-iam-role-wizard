@@ -94,3 +94,4 @@ ansible-galaxy-cache/
 # Ignore local kitchen test states and hidden folders
 .chef/
 .kitchen/
+.vercel
