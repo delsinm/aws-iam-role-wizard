@@ -968,7 +968,7 @@ const STEPS = [
   { id: 'identity',    label: 'Identity'    },
   { id: 'trust',       label: 'Trust'       },
   { id: 'permissions', label: 'Permissions' },
-  { id: 'conditions',  label: 'Conditions'  },
+  { id: 'conditions',  label: 'Security'    },
   { id: 'advanced',    label: 'Review'      },
 ];
 
@@ -1138,7 +1138,7 @@ function renderTrustDetails_inline(trustType, awsServices, selectedServices) {
       <div class="field">
         <label>Trusted ARNs (IAM Users / Roles) <span class="req">*</span></label>
         <textarea id="trustedArns" placeholder="arn:aws:iam::123456789012:root&#10;arn:aws:iam::123456789012:role/MyRole&#10;arn:aws:iam::123456789012:user/alice">${f('trustedArns') || ''}</textarea>
-        <div class="hint">one ARN per line</div>
+        <div class="hint">one ARN per line — format: <code style="font-family:inherit;background:var(--surface);padding:1px 5px;border-radius:3px;border:1px solid var(--border)">arn:aws:iam::ACCOUNT_ID:root|user/NAME|role/NAME</code></div>
       </div>`;
   }
   if (trustType === 'cross_account') {
@@ -1571,7 +1571,7 @@ function setSvcLevel(id, level) {
 function renderConditions() {
   return `
   <div class="card">
-    <div class="card-title">Security Conditions <span class="tag">STEP 4</span></div>
+    <div class="card-title">Security <span class="tag">STEP 4</span></div>
     <div class="card-desc">// MFA, IP restrictions, session limits, deny rules</div>
     <div class="toggle-row">
       <span class="toggle-label-wrap">
@@ -1768,6 +1768,7 @@ const STEP_RULES = {
   trust: [
     { id: 'trustType', label: 'Principal Type', hint: 'who assumes this role', special: 'pill', pillGroup: 'trustPills' },
     { id: 'trustedArns',       label: 'Trusted ARNs',          hint: 'one ARN per line',                special: 'trust_conditional', trustTypes: ['iam_user'] },
+    { id: 'trustedArns',       label: 'Trusted ARNs — invalid format', hint: 'format: arn:aws:iam::ACCOUNT_ID:root|user/NAME|role/NAME', special: 'trust_arn_format', trustTypes: ['iam_user'] },
     { id: 'trustedAccountId',  label: 'Trusted Account ID',    hint: '12-digit account ID',             special: 'trust_conditional', trustTypes: ['cross_account'] },
     { id: 'oidcUrl',           label: 'OIDC Provider URL',     hint: 'e.g. token.actions.githubusercontent.com', special: 'trust_conditional', trustTypes: ['oidc'] },
     { id: 'samlProviderArn',   label: 'SAML Provider ARN',     hint: 'arn:aws:iam::...:saml-provider/…', special: 'trust_conditional', trustTypes: ['saml'] },
@@ -1861,6 +1862,21 @@ function validateStep(idx) {
       if (!el || !el.value.trim()) {
         missing.push(rule);
         if (el) { el.classList.add('field-error'); el.addEventListener('input', function() { el.classList.remove('field-error'); }, { once: true }); }
+      }
+      return;
+    }
+    // Trust: validate that each ARN in the textarea is a valid IAM ARN
+    if (rule.special === 'trust_arn_format') {
+      if (!rule.trustTypes.includes(currentTrustType)) return;
+      const el = document.getElementById(rule.id);
+      if (!el || !el.value.trim()) return; // empty is caught by trust_conditional
+      const lines = el.value.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+      const arnRe = /^arn:aws(-cn|-us-gov)?:iam::\d{12}:(root|user\/[\w+=,.@\-\/]+|role\/[\w+=,.@\-\/]+|group\/[\w+=,.@\-\/]+|assumed-role\/[\w+=,.@\-\/]+)$/;
+      const badLines = lines.filter(function(l) { return !arnRe.test(l); });
+      if (badLines.length > 0) {
+        missing.push({ id: rule.id, label: 'Trusted ARNs — invalid format', hint: badLines.length === 1 ? '"' + badLines[0].slice(0, 40) + (badLines[0].length > 40 ? '…' : '') + '"' : badLines.length + ' invalid lines' });
+        el.classList.add('field-error');
+        el.addEventListener('input', function() { el.classList.remove('field-error'); }, { once: true });
       }
       return;
     }
