@@ -2115,14 +2115,9 @@ async function generateIAM() {
 function backToWizard() {
   document.getElementById('resultsPage').style.display = 'none';
   document.getElementById('wizardPage').style.display = 'block';
-  // Re-enable the generate button and wizard back button
-  const genBtn = document.querySelector('.btn-generate');
-  if (genBtn) {
-    genBtn.disabled = false;
-    document.getElementById('genBtnText').innerHTML = '⚡ Generate IAM Role Files';
-  }
-  const backBtn = document.querySelector('.btn-row .btn-secondary');
-  if (backBtn) backBtn.disabled = false;
+  // Re-render the wizard so all fields reflect current formData and any
+  // changes the user makes will be picked up correctly by the next generate
+  renderAll();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
