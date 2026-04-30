@@ -56,7 +56,7 @@ vercel env add ANTHROPIC_API_KEY
 
 Or in the Vercel dashboard: **Project → Settings → Environment Variables**.
 
-Add your Anthropic key from ([console.anthropic.com](https://console.anthropic.com/)). The key is never exposed to the browser — all Anthropic API calls are proxied through the serverless function.
+Add your Anthropic API key from [console.anthropic.com](https://console.anthropic.com/). The key is never exposed to the browser — all Anthropic API calls are proxied through the serverless function.
 
 ### 4.Redeploy to apply the environment variable
 
