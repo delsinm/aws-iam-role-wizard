@@ -2,7 +2,7 @@
 
 # AWS IAM Role Wizard
 
-A browser-based tool that generates AWS IAM role configuration files. Fill out a guided form, click **Generate IAM Role Files**, and receive a complete, commented set of `.tf` or `.json` files ready to hand off to your cloud or DevOps team.
+A browser-based tool that generates AWS IAM role configuration files. Fill out a guided form, click **Generate IAM Role Files**, and receive a complete, set of `.tf` files ready to hand off to your cloud or DevOps team.
 
 ---
 
@@ -91,16 +91,6 @@ The wizard produces IAM role files following AWS security best practices — no 
 | `iam_role.tf`  | `aws_iam_role`, inline policy, managed policy attachments, instance profile, and optional CloudWatch alarm |
 | `variables.tf` | Configurable values: account ID, role name, trusted principals, tags, etc.                                 |
 | `outputs.tf`   | Role ARN, role name, and instance profile ARN (if applicable)                                              |
-
-
-### JSON output (`json` mode)
-
-
-| File                     | Contents                               |
-| ------------------------ | -------------------------------------- |
-| `trust_policy.json`      | IAM trust relationship policy document |
-| `permission_policy.json` | IAM permission policy document         |
-
 
 All files are available individually via the one-click **Copy** button on each panel, or bundled together using the **Download ZIP** button.
 
