@@ -1684,13 +1684,7 @@ function renderAdvanced() {
       </span>
       <label class="toggle"><input type="checkbox" id="cwAlarms" ${f('cwAlarms') ? 'checked' : ''}><span class="slider"></span></label>
     </div>
-    <div class="toggle-row">
-      <span class="toggle-label-wrap">
-        <span class="toggle-label">Include aws_iam_policy_document data sources (Terraform best practice)</span>
-        <a class="help-link" href="https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document" target="_blank" rel="noopener">?</a>
-      </span>
-      <label class="toggle"><input type="checkbox" id="useDataSource" ${f('useDataSource') !== false ? 'checked' : ''}><span class="slider"></span></label>
-    </div>
+
     <hr class="section-divider"/>
     <div class="field" style="margin-bottom:16px">
       <label>Additional Tags (key=value pairs)</label>
@@ -2211,7 +2205,6 @@ PERMISSIONS:
 - Resource scope: ${d.resourceScope||'all'}
 - Resource ARNs / conditions: ${d.resourceArns||'*'}
 - Create policy as separate resource: ${d.separatePolicy!==false?'yes':'no'}
-- Use aws_iam_policy_document data sources: ${d.useDataSource!==false?'yes':'no'}
 
 SECURITY CONDITIONS:
 - Require MFA: ${d.requireMFA?'yes':'no'}
@@ -2243,7 +2236,8 @@ Rules:
 - JSON files: valid IAM policy JSON only, no prose
 - Do NOT emit a terraform {} block (required_version, required_providers, etc.) — this code is intended to be dropped into an existing codebase that already has one
 - MANAGED POLICY ATTACHMENTS (Terraform): for every managed policy ARN (both preset and additional), generate one aws_iam_role_policy_attachment resource per policy with a descriptive unique name. Do NOT use for_each or local lists — each attachment must be its own explicit resource block. Never use the deprecated aws_iam_policy_attachment resource.
-- INLINE POLICY (Terraform): when an inline policy is required (mode = custom or both), generate a single aws_iam_role_policy resource (or aws_iam_policy + aws_iam_role_policy_attachment if "Create policy as separate resource" is yes) using the aws_iam_policy_document data source for the policy body. Do NOT embed the policy JSON as a raw heredoc string.
+- TRUST POLICY (Terraform): the assume_role_policy argument on aws_iam_role MUST always be a jsonencode() literal written directly in the resource block — never a data.aws_iam_policy_document reference. Do NOT declare an aws_iam_policy_document data source for the trust policy under any circumstances.
+- INLINE POLICY (Terraform): when an inline policy is required (mode = custom or both), generate a single aws_iam_role_policy resource (or aws_iam_policy + aws_iam_role_policy_attachment if "Create policy as separate resource" is yes). The policy body MUST be a jsonencode() literal written directly in the resource block — do NOT declare an aws_iam_policy_document data source and do NOT use a heredoc string.
 - Every attachment resource must explicitly reference the aws_iam_role it attaches to (e.g. role = aws_iam_role.this.name) so Terraform can order creation correctly.`;
 }
 
