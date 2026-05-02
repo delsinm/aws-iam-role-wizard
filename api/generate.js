@@ -2,6 +2,14 @@ import { kv } from '@vercel/kv';
 
 const RATE_LIMIT_SECONDS = 120; // 2 minutes
 
+async function loadSkill(req) {
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  const host  = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost:3000';
+  const res = await fetch(`${proto}://${host}/SKILL.md`);
+  if (!res.ok) throw new Error(`Failed to load SKILL.md: ${res.status} ${res.statusText}`);
+  return res.text();
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -42,8 +50,11 @@ export default async function handler(req, res) {
     console.error('KV rate limit error:', kvErr.message);
   }
 
-  // ── Proxy to Anthropic ───────────────────────────────────────────────────────
+  // ── Load SKILL.md and proxy to Anthropic ─────────────────────────────────────
   try {
+    const system = await loadSkill(req);
+    const { system: _drop, ...bodyWithoutSystem } = req.body; // strip any client-sent system
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -51,7 +62,7 @@ export default async function handler(req, res) {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({ ...bodyWithoutSystem, system }),
     });
 
     const data = await response.json();
